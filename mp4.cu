@@ -18,7 +18,9 @@ using namespace std;
 #define TILEWIDTH 2
 #define arrLen 8
 
-__global__ void tileMult(int *a, int *b, int *c, int length) {
+typedef int matrix[];
+
+__global__ void tileMult(matrix *a, matrix *b, matrix *c, int length) {
 	int row = threadIdx.x + TILEWIDTH * blockIdx.x;
 	int col = threadIdx.y + TILEWIDTH * blockIdx.y;
 	__shared__ int sharedM[TILEWIDTH][TILEWIDTH];
@@ -27,8 +29,8 @@ __global__ void tileMult(int *a, int *b, int *c, int length) {
 	int l = col * arrLen + row;
 	for (int k = 0; k < arrLen / TILEWIDTH; ++k) {
 		if (row < arrLen && col < arrLen) {
-			sharedM[threadIdx.y][threadIdx.x] = a[col*arrLen + (k* TILEWIDTH + threadIdx.x)];
-			sharedN[threadIdx.y][threadIdx.x] = b[row + arrLen * (k* TILEWIDTH + threadIdx.y)];
+			sharedM[threadIdx.y][threadIdx.x] = (*a)[col*arrLen + (k* TILEWIDTH + threadIdx.x)];
+			sharedN[threadIdx.y][threadIdx.x] = (*b)[row + arrLen * (k* TILEWIDTH + threadIdx.y)];
 		}
 		else {
 			sharedM[threadIdx.y][threadIdx.x] = 0;
@@ -40,54 +42,83 @@ __global__ void tileMult(int *a, int *b, int *c, int length) {
 			__syncthreads();
 		}
 	}
-	c[l] = temp;
-
+	(*c)[l] = temp;
 }
 
-void printMatrix(int *arr1) {
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
-			int idx = i + n*arrLen;
-			cout << arr1[idx] << " ";
+int printMatrix(matrix *matrix) {
+	for (int x = 0; x < arrLen; x++)
+	{
+		for (int y = 0; y < arrLen; y++)
+		{
+			int i = y + x * arrLen;
+			printf("(%d)", (*matrix)[i]);
 		}
-		cout << endl;
+		printf("\n");
 	}
+	return 0;
 }
 
-int checkMatrix(int *arr1, int *arr2) {
-	for (int i = 0; i < arrLen*arrLen; i++) {
-		if (arr1[i] != arr2[i]) {
-			return -1;
+int checkMatrix(matrix *arr1, matrix *arr2) {
+	for (int x = 0; x < arrLen; x++) {
+		for (int y = 0; y < arrLen; y++) {
+			int i = x + y * arrLen;
+			if ((*arr1)[i] != (*arr2)[i]) {
+				return -1;
+			}
 		}
 	}
 	return 1;
 }
 
+int initRandomMatrix(matrix *m) {
+	for (int x = 0; x < arrLen; x++) {
+		for (int y = 0; y < arrLen; y++) {
+			int i = x + y * arrLen;
+			(*m)[i] = rand() % 10;
+		}
+	}
+	return 0;
+}
+
+int multMatrixCPU(matrix* M, matrix *N, matrix *P) {
+	for (int x = 0; x < arrLen; x++) {
+		for (int y = 0; y < arrLen; y++) {
+			int l = 0;
+			for (int k = 0; k < arrLen; k++) {
+				int midx = k + x * arrLen;
+				int midy = k * arrLen + y;
+				l += (*M)[midx] * (*N)[midy];
+
+			}
+			(*P)[x * arrLen + y] = l;
+		}
+	}
+	return 0;
+}
+
 
 int matrix_addition() {
 
-	int *a;
-	int *b;
-	int *c;
-	int *cTmp;
+	matrix *a;
+	matrix *b;
+	matrix *c;
 
 	size_t size = arrLen * arrLen * sizeof(int);
 
-	a = (int*)malloc(size);
-	b = (int*)malloc(size);
-	c = (int*)malloc(size);
-	cTmp = (int*)malloc(size);
+	a = (matrix*)malloc(size);
+	b = (matrix*)malloc(size);
+	c = (matrix*)malloc(size);
 
 	srand(time(NULL));
 
-	for (int i = 0; i < arrLen*arrLen; i++) {
-		a[i] = rand() % 10 + 1;
-		b[i] = rand() % 10 + 1;
-		c[i] = 0;
-		cTmp[i] = 0;
-	}
+	initRandomMatrix(a);
+	initRandomMatrix(b);
+	initRandomMatrix(c);
 
-	int *pA, *pB, *pC;
+	cudaEvent_t start, end;
+	float time = 0;
+
+	matrix *pA, *pB, *pC;
 
 	cudaMalloc((void**)&pA, size);
 	cudaMalloc((void**)&pB, size);
@@ -99,50 +130,33 @@ int matrix_addition() {
 
 	cout << "Start CPU" << endl;
 
-	float time = 0;
-	cudaEvent_t start, end;
 	cudaEventCreate(&start);
 	cudaEventCreate(&end);
-	cudaEventRecord(start);
-
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
-			for (int j = 0; j < arrLen; j++) {
-				cTmp[i + n*arrLen] += a[i + j*arrLen] * b[j + n*arrLen];
-			}
-		}
-	}
-
-	cudaEventRecord(end);
-	cudaEventSynchronize(end);
-	cudaEventElapsedTime(&time, start, end);
-	cudaEventDestroy(start);
-	cudaEventDestroy(end);
-	cout << "CPU Time: " << time << endl;
-
-    printMatrix(cTmp);
-	cout << endl;
-
-	time = 0;
-	cudaEventCreate(&start);
-	cudaEventCreate(&end);
-	cudaEventRecord(start);
+	cudaEventRecord(start, 0);
 
 	dim3 threadsPerBlock(TILEWIDTH, TILEWIDTH);
 	dim3 numBlocks((int)ceil(arrLen / (float)TILEWIDTH), (int)ceil(arrLen / (float)TILEWIDTH));
 	tileMult << <numBlocks, threadsPerBlock >> >(pA, pB, pC, arrLen);
 
-	cudaEventRecord(end);
+	cudaEventRecord(end, 0);
 	cudaEventSynchronize(end);
 	cudaEventElapsedTime(&time, start, end);
 	cudaEventDestroy(start);
 	cudaEventDestroy(end);
 	cout << "GPU Element Time: " << time << endl;
 
-	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(int), cudaMemcpyDeviceToHost);
 
 	printMatrix(c);
 	cout << endl;
+
+
+	clock_t before = clock();
+	matrix *cTmp = (matrix*)malloc(size);
+	multMatrixCPU(a, b, cTmp);
+	clock_t difference = clock() - before;
+	float msec = difference * 1000 / CLOCKS_PER_SEC;
+	printf("CPU calculation took %f s\n", msec / 1000);
 
 	int rslt = checkMatrix(c, cTmp);
 	cout << rslt << endl;
@@ -153,7 +167,10 @@ int matrix_addition() {
 	else {
 		cout << "Test Passed" << endl;
 	}
-	
+
+	printMatrix(cTmp);
+	cout << endl;
+
 	cudaFree(pA);
 	cudaFree(pB);
 	cudaFree(pC);
@@ -161,8 +178,6 @@ int matrix_addition() {
 	free(b);
 	free(c);
 	free(cTmp);
-
-	cudaDeviceReset();
 
 	return 0;
 }
