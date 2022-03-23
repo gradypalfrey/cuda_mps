@@ -15,32 +15,35 @@
 using namespace std;
 
 #define BLOCKDIM 16
-#define arrLen 256
+#define arrLen 4096
 
-__global__ void addElement(int a[][arrLen], int b[][arrLen], int c[][arrLen], int length) {
+__global__ void addElement(int *a, int *b, int *c, int length) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
 	int n = blockIdx.y * blockDim.y + threadIdx.y;
-
 	if (i < length && n < length) {
-		c[i][n] = a[i][n] + b[i][n];
+		int idx = i + n*arrLen;
+		c[idx] = a[idx] + b[idx];
 	}
 }
 
-__global__ void addRow(int a[][arrLen], int b[][arrLen], int c[][arrLen], int length) {
+__global__ void addRow(int *a, int *b, int *c, int length) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
-
 	for (int n = 0; n < length; n++) {
-		if (i < length && n < length)
-			c[i][n] = a[i][n] + b[i][n];
+		if (i < length && n < length) {
+			int idx = i + n*arrLen;
+			c[idx] = a[idx] + b[idx];
+		}
 	}
 }
 
-__global__ void addCol(int a[][arrLen], int b[][arrLen], int c[][arrLen], int length) {
+__global__ void addCol(int *a, int *b, int *c, int length) {
 	int n = blockIdx.y * blockDim.y + threadIdx.y;
 
 	for (int i = 0; i < length; i++) {
-		if (i < length && n < length)
-			c[i][n] = a[i][n] + b[i][n];
+		if (i < length && n < length) {
+			int idx = i + n*arrLen;
+			c[idx] = a[idx] + b[idx];
+		}
 	}
 }
 
@@ -53,72 +56,72 @@ void printMatrix(int a[][arrLen]) {
 	}
 }
 
-int checkMatrix(int arr1[][arrLen], int arr2[][arrLen]) {
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
-			if (arr1[i][n] != arr2[i][n]) {
-				return -1;
-			}
+int checkMatrix(int *arr1, int *arr2) {
+	for (int i = 0; i < arrLen*arrLen; i++) {
+		if (arr1[i] != arr2[i]) {
+			return -1;
 		}
 	}
-    return 1;
+	return 1;
 }
 
-tyedef int matrix[];
-
-size_t dsize;
 
 int matrix_addition() {
 
-	int a[arrLen][arrLen];
-	int b[arrLen][arrLen];
-	int c[arrLen][arrLen];
+	int *a;
+	int *b;
+	int *c;
+	int *cTmp;
+
+	size_t size = arrLen * arrLen * sizeof(int);
+
+	a = (int*)malloc(size);
+	b = (int*)malloc(size);
+	c = (int*)malloc(size);
+	cTmp = (int*)malloc(size);
 
 	srand(time(NULL));
 
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
-			a[i][n] = rand() % 10 + 1;
-			b[i][n] = rand() % 10 + 1;
-			c[i][n] = 0;
-		}
+	for (int i = 0; i < arrLen*arrLen; i++) {
+		a[i] = rand() % 10 + 1;
+		b[i] = rand() % 10 + 1;
+		c[i] = 0;
+		cTmp[i] = 0;
 	}
 
-	int(*pA)[arrLen], (*pB)[arrLen], (*pC)[arrLen];
+	int *pA, *pB, *pC;
 
-	cudaMalloc((void**)&pA, (arrLen*arrLen)*sizeof(int));
-	cudaMalloc((void**)&pB, (arrLen*arrLen)*sizeof(int));
-	cudaMalloc((void**)&pC, (arrLen*arrLen)*sizeof(int));
+	cudaMalloc((void**)&pA, size);
+	cudaMalloc((void**)&pB, size);
+	cudaMalloc((void**)&pC, size);
 
-	cudaMemcpy(pA, a, (arrLen*arrLen)*sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(pB, b, (arrLen*arrLen)*sizeof(int), cudaMemcpyHostToDevice);
-	cudaMemcpy(pC, c, (arrLen*arrLen)*sizeof(int), cudaMemcpyHostToDevice);
+	cudaMemcpy(pA, a, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(pB, b, size, cudaMemcpyHostToDevice);
+	cudaMemcpy(pC, c, size, cudaMemcpyHostToDevice);
 
-	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(int), cudaMemcpyDeviceToHost);
+	// cudaMemcpy(c, pC, size, cudaMemcpyDeviceToHost);
+
+	cout << "Start CPU" << endl;
 
 	float time = 0;
-    cudaEvent_t start, end;
-	// cudaEventCreate(&start);
-	// cudaEventCreate(&end);
-	// cudaEventRecord(start);
-
-	// auto cTmp = new int[arrLen][arrLen];
+	cudaEvent_t start, end;
+	cudaEventCreate(&start);
+	cudaEventCreate(&end);
+	cudaEventRecord(start);
 
 
-	// for (int i = 0; i < arrLen; i++) {
-	// 	for (int n = 0; n < arrLen; n++) {
-	// 		cTmp[i][n] = a[i][n] + b[i][n];
-	// 	}
-	// }
+	for (int i = 0; i < arrLen*arrLen; i++) {
+		cTmp[i] = a[i] + b[i];
+	}
 
-    // cudaEventRecord(end);
-	// cudaEventSynchronize(end);
-	// cudaEventElapsedTime(&time, start, end);
-	// cudaEventDestroy(start);
-	// cudaEventDestroy(end);
-    // cout << "CPU Time: " << time << endl;
+	cudaEventRecord(end);
+	cudaEventSynchronize(end);
+	cudaEventElapsedTime(&time, start, end);
+	cudaEventDestroy(start);
+	cudaEventDestroy(end);
+	cout << "CPU Time: " << time << endl;
 
-    // time = 0;
+	time = 0;
 	cudaEventCreate(&start);
 	cudaEventCreate(&end);
 	cudaEventRecord(start);
@@ -134,68 +137,79 @@ int matrix_addition() {
 	cudaEventDestroy(end);
 	cout << "GPU Element Time: " << time << endl;
 
-    // cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
 
-    // int rslt = checkMatrix(c, cTmp);
+	int rslt = checkMatrix(c, cTmp);
 
-    // if (rslt) {
-    //     cout << "Test Passed" << endl;
-    // } else {
-    //     cout << "Test Failed" << endl;
-    // }
+	if (rslt) {
+		cout << "Test Passed" << endl;
+	}
+	else {
+		cout << "Test Failed" << endl;
+	}
 
-    // time = 0;
-	// cudaEventCreate(&start);
-	// cudaEventCreate(&end);
-	// cudaEventRecord(start);
+	time = 0;
+	cudaEventCreate(&start);
+	cudaEventCreate(&end);
+	cudaEventRecord(start);
 
-	// addRow << <numBlocks, threadsPerBlock >> >(pA, pB, pC, arrLen);
+	dim3 numBlocks1((int)ceil(arrLen / (float)threadsPerBlock.x), 1);
+	addRow << <numBlocks1, threadsPerBlock >> >(pA, pB, pC, arrLen);
 
-	// cudaEventRecord(end);
-	// cudaEventSynchronize(end);
-	// cudaEventElapsedTime(&time, start, end);
-	// cudaEventDestroy(start);
-	// cudaEventDestroy(end);
-	// cout << "GPU Row Time: " << time << endl;
+	cudaEventRecord(end);
+	cudaEventSynchronize(end);
+	cudaEventElapsedTime(&time, start, end);
+	cudaEventDestroy(start);
+	cudaEventDestroy(end);
+	cout << "GPU Row Time: " << time << endl;
 
-    // cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
 
-    // rslt = checkMatrix(c, cTmp);
+	rslt = checkMatrix(c, cTmp);
 
-    // if (rslt) {
-    //     cout << "Test Passed" << endl;
-    // } else {
-    //     cout << "Test Failed" << endl;
-    // }
+	if (rslt) {
+		cout << "Test Passed" << endl;
+	}
+	else {
+		cout << "Test Failed" << endl;
+	}
 
-    // time = 0;
-	// cudaEventCreate(&start);
-	// cudaEventCreate(&end);
-	// cudaEventRecord(start);
+	time = 0;
+	cudaEventCreate(&start);
+	cudaEventCreate(&end);
+	cudaEventRecord(start);
 
-	// addCol << <numBlocks, threadsPerBlock >> >(pA, pB, pC, arrLen);
+	dim3 numBlocks2(1, (int)ceil(arrLen / (float)threadsPerBlock.x));
+	addCol << <numBlocks2, threadsPerBlock >> >(pA, pB, pC, arrLen);
 
-	// cudaEventRecord(end);
-	// cudaEventSynchronize(end);
-	// cudaEventElapsedTime(&time, start, end);
-	// cudaEventDestroy(start);
-	// cudaEventDestroy(end);
-	// cout << "GPU Col Time: " << time << endl;
+	cudaEventRecord(end);
+	cudaEventSynchronize(end);
+	cudaEventElapsedTime(&time, start, end);
+	cudaEventDestroy(start);
+	cudaEventDestroy(end);
+	cout << "GPU Col Time: " << time << endl;
 
-	// cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
+	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
 
-    // rslt = checkMatrix(c, cTmp);
+	rslt = checkMatrix(c, cTmp);
 
-    // if (rslt) {
-    //     cout << "Test Passed" << endl;
-    // } else {
-    //     cout << "Test Failed" << endl;
-    // }
+	if (rslt) {
+		cout << "Test Passed" << endl;
+	}
+	else {
+		cout << "Test Failed" << endl;
+	}
 
 
 	cudaFree(pA);
 	cudaFree(pB);
 	cudaFree(pC);
+	free(a);
+	free(b);
+	free(c);
+	free(cTmp);
+
+	cudaDeviceReset();
 
 	return 0;
 }
