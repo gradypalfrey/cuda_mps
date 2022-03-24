@@ -33,7 +33,8 @@ int main(int argc, char *argv[])
 			deviceProp.clockRate * 1e-6f);
 		printf("  Total number of streaming multiprocessors:        %zu\n",
 			deviceProp.multiProcessorCount);
-		printf("  Total number of cores:        cores\n"); // Need it
+		printf("  Total number of cores:       %d cores\n", _ConvertSMVer2Cores(deviceProp.major, deviceProp.minor) *
+               deviceProp.multiProcessorCount);
 		printf("  Total amount of constant memory:               %zu bytes\n",
 			deviceProp.totalConstMem);
 		printf("  Total amount of global memory:       %zu bytes\n",
