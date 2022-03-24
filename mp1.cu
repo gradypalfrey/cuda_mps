@@ -31,11 +31,13 @@ int main(int argc, char *argv[])
 		cudaGetDeviceProperties(&deviceProp, d);
 		printf("  Clock Rate:               %0.f gHz\n",
 			deviceProp.clockRate * 1e-6f);
-		printf("  Total number of streaming multiprocessors:        %zu bytes\n",
+		printf("  Total number of streaming multiprocessors:        %zu\n",
 			deviceProp.multiProcessorCount);
-		printf("  Total number of cores:        cores\n");
+		printf("  Total number of cores:        cores\n"); // Need it
 		printf("  Total amount of constant memory:               %zu bytes\n",
 			deviceProp.totalConstMem);
+		printf("  Total amount of global memory:       %zu bytes\n",
+			deviceProp.totalGlobalMem);
 		printf("  Total amount of shared memory per block:       %zu bytes\n",
 			deviceProp.sharedMemPerBlock);
 		printf("  Total number of registers available per block: %d\n",

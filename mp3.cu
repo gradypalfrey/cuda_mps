@@ -15,7 +15,7 @@
 using namespace std;
 
 #define BLOCKDIM 16
-#define arrLen 4096
+#define arrLen 16
 
 __global__ void multElement(int *a, int *b, int *c, int length) {
 	int i = blockIdx.x * blockDim.x + threadIdx.x;
@@ -73,6 +73,12 @@ int matrix_addition() {
 
 	int *pA, *pB, *pC;
 
+    float time1 = 0;
+	cudaEvent_t start1, end1;
+    cudaEventCreate(&start1);
+	cudaEventCreate(&end1);
+	cudaEventRecord(start1);
+
 	cudaMalloc((void**)&pA, size);
 	cudaMalloc((void**)&pB, size);
 	cudaMalloc((void**)&pC, size);
@@ -80,6 +86,13 @@ int matrix_addition() {
 	cudaMemcpy(pA, a, size, cudaMemcpyHostToDevice);
 	cudaMemcpy(pB, b, size, cudaMemcpyHostToDevice);
 	cudaMemcpy(pC, c, size, cudaMemcpyHostToDevice);
+
+    cudaEventRecord(end1);
+	cudaEventSynchronize(end1);
+	cudaEventElapsedTime(&time1, start1, end1);
+	cudaEventDestroy(start1);
+	cudaEventDestroy(end1);
+	cout << "Transfer Time: " << time1 << endl;
 
 	cout << "Start CPU" << endl;
 
