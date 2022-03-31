@@ -1,7 +1,7 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 
-#include <string.h> 
+#include <string.h>
 #include <stdio.h>
 
 #include <iostream>
@@ -9,63 +9,78 @@
 #include <string>
 
 #include <stdlib.h>
-#include <time.h>  
+#include <time.h>
 
 using namespace std;
 
 #define TILEWIDTH 2
 #define arrLen 8
 
-__global__ void tileMult(int *a, int *b, int *c, int length) {
-	int row = threadIdx.x + TILEWIDTH * blockIdx.x;
-	int col = threadIdx.y + TILEWIDTH * blockIdx.y;
-	__shared__ int sharedM[TILEWIDTH][TILEWIDTH];
-	__shared__ int sharedN[TILEWIDTH][TILEWIDTH];
-	int temp = 0;
-	int l = col * arrLen + row;
-	for (int k = 0; k < arrLen / TILEWIDTH; ++k) {
-		if (row < arrLen && col < arrLen) {
-			sharedM[threadIdx.y][threadIdx.x] = a[col*arrLen + (k* TILEWIDTH + threadIdx.x)];
-			sharedN[threadIdx.y][threadIdx.x] = b[row + arrLen * (k* TILEWIDTH + threadIdx.y)];
+__global__ void tileMult(int *a, int *b, int *c, int length)
+{
+	__shared__ int m1[TILEWIDTH][TILEWIDTH];
+	__shared__ int m2[TILEWIDTH][TILEWIDTH];
+
+	int i = threadIdx.x + TILEWIDTH * blockIdx.x;
+	int n = threadIdx.y + TILEWIDTH * blockIdx.y;
+
+	int curr = 0;
+	for (int j = 0; j < arrLen / TILEWIDTH; j)
+	{
+		if (i < arrLen && n < arrLen)
+		{
+			m1[threadIdx.y][threadIdx.x] = a[n * arrLen + (j * TILEWIDTH + threadIdx.x)];
+			m2[threadIdx.y][threadIdx.x] = b[i + arrLen * (j * TILEWIDTH + threadIdx.y)];
 		}
-		else {
-			sharedM[threadIdx.y][threadIdx.x] = 0;
-			sharedN[threadIdx.y][threadIdx.x] = 0;
+		else
+		{
+			m1[threadIdx.y][threadIdx.x] = 0;
+			m2[threadIdx.y][threadIdx.x] = 0;
 		}
 		__syncthreads();
-		for (int h = 0; h < TILEWIDTH; h++) {
-			temp += sharedM[threadIdx.y][h] * sharedN[h][threadIdx.x];
+		for (int h = 0; h < TILEWIDTH; h++)
+		{
+			curr += m1[threadIdx.y][h] * m2[h][threadIdx.x];
 			__syncthreads();
 		}
 	}
-	c[l] = temp;
-
+	c[n * arrLen + i] = temp;
 }
 
-void printMatrix(int *arr1) {
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
-			int idx = i + n*arrLen;
+void printMatrix(int *arr1)
+{
+	for (int i = 0; i < arrLen; i++)
+	{
+		for (int n = 0; n < arrLen; n++)
+		{
+			int idx = i + n * arrLen;
 			cout << arr1[idx] << " ";
 		}
 		cout << endl;
 	}
 }
 
-int checkMatrix(int *arr1, int *arr2) {
-	for (int i = 0; i < arrLen*arrLen; i++) {
-		if (arr1[i] != arr2[i]) {
+int checkMatrix(int *arr1, int *arr2)
+{
+	for (int i = 0; i < arrLen * arrLen; i++)
+	{
+		if (arr1[i] != arr2[i])
+		{
 			return -1;
 		}
 	}
 	return 1;
 }
 
-int cpuMult(int* a, int *b, int *c) {
-	for (int i = 0; i < arrLen; i++) {
-		for (int n = 0; n < arrLen; n++) {
+int mult(int *a, int *b, int *c)
+{
+	for (int i = 0; i < arrLen; i++)
+	{
+		for (int n = 0; n < arrLen; n++)
+		{
 			int current = 0;
-			for (int k = 0; k < arrLen; k++) {
+			for (int k = 0; k < arrLen; k++)
+			{
 				int midx = k + i * arrLen;
 				int midy = k * arrLen + n;
 				current += a[k + i * arrLen] * b[k * arrLen + n];
@@ -76,8 +91,8 @@ int cpuMult(int* a, int *b, int *c) {
 	return 0;
 }
 
-
-int matrix_addition() {
+int matrix_addition()
+{
 
 	int *a;
 	int *b;
@@ -85,13 +100,14 @@ int matrix_addition() {
 
 	size_t size = arrLen * arrLen * sizeof(int);
 
-	a = (int*)malloc(size);
-	b = (int*)malloc(size);
-	c = (int*)malloc(size);
+	a = (int *)malloc(size);
+	b = (int *)malloc(size);
+	c = (int *)malloc(size);
 
 	srand(time(NULL));
 
-	for (int i = 0; i < arrLen*arrLen; i++) {
+	for (int i = 0; i < arrLen * arrLen; i++)
+	{
 		a[i] = rand() % 10 + 1;
 		b[i] = rand() % 10 + 1;
 		c[i] = 0;
@@ -99,9 +115,9 @@ int matrix_addition() {
 
 	int *pA, *pB, *pC;
 
-	cudaMalloc((void**)&pA, size);
-	cudaMalloc((void**)&pB, size);
-	cudaMalloc((void**)&pC, size);
+	cudaMalloc((void **)&pA, size);
+	cudaMalloc((void **)&pB, size);
+	cudaMalloc((void **)&pC, size);
 
 	cudaMemcpy(pA, a, size, cudaMemcpyHostToDevice);
 	cudaMemcpy(pB, b, size, cudaMemcpyHostToDevice);
@@ -112,23 +128,28 @@ int matrix_addition() {
 	float time = 0;
 	cudaEvent_t start, end;
 
-	clock_t before = clock();
-    int *cTmp = (int*)malloc(size);
-    cpuMult(a, b, cTmp);
-	clock_t difference = clock() - before;
-	float msec = difference * 1000 / CLOCKS_PER_SEC;
-	printf("CPU calculation took %f s\n", msec / 1000);
+	cudaEventCreate(&start);
+	cudaEventCreate(&end);
+	cudaEventRecord(start);
+	mult(a, b, cTmp);
+	cudaEventRecord(end);
+	cudaEventSynchronize(end);
+	cudaEventElapsedTime(&time, start, end);
+	cudaEventDestroy(start);
+	cudaEventDestroy(end);
+	cout << "CPU Element Time: " << time << endl;
 
 	int rslt = checkMatrix(c, cTmp);
 	cout << rslt << endl;
 
-	if (rslt == -1) {
+	if (rslt == -1)
+	{
 		cout << "Test Failed" << endl;
 	}
-	else {
+	else
+	{
 		cout << "Test Passed" << endl;
 	}
-
 
 	time = 0;
 	cudaEventCreate(&start);
@@ -137,7 +158,7 @@ int matrix_addition() {
 
 	dim3 threadsPerBlock(TILEWIDTH, TILEWIDTH);
 	dim3 numBlocks((int)ceil(arrLen / (float)TILEWIDTH), (int)ceil(arrLen / (float)TILEWIDTH));
-	tileMult << <numBlocks, threadsPerBlock >> >(pA, pB, pC, arrLen);
+	tileMult<<<numBlocks, threadsPerBlock>>>(pA, pB, pC, arrLen);
 
 	cudaEventRecord(end);
 	cudaEventSynchronize(end);
@@ -146,18 +167,17 @@ int matrix_addition() {
 	cudaEventDestroy(end);
 	cout << "GPU Element Time: " << time << endl;
 
-	cudaMemcpy(c, pC, (arrLen*arrLen)*sizeof(float), cudaMemcpyDeviceToHost);
-
-	// printMatrix(c);
-	// cout << endl;
+	cudaMemcpy(c, pC, (arrLen * arrLen) * sizeof(float), cudaMemcpyDeviceToHost);
 
 	rslt = checkMatrix(c, cTmp);
 	cout << rslt << endl;
 
-	if (rslt == -1) {
+	if (rslt == -1)
+	{
 		cout << "Test Failed" << endl;
 	}
-	else {
+	else
+	{
 		cout << "Test Passed" << endl;
 	}
 
